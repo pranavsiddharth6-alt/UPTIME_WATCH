@@ -2,15 +2,22 @@ name: UptimeWatch monitoring
 
 on:
   workflow_dispatch:
+  # Enable only after an authorized manual run saves a check through approved Atlas egress.
+  # Example: every 15 minutes (UTC).
   # schedule:
   #   - cron: '*/15 * * * *'
 
 permissions:
   contents: read
 
+concurrency:
+  group: uptimewatch-monitoring
+  cancel-in-progress: false
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -29,7 +36,8 @@ jobs:
         shell: bash
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          MONGODB_DB_NAME: ${{ vars.MONGODB_DB_NAME || 'uptimewatch' }}
+          MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME || vars.MONGODB_DB_NAME || 'uptimewatch' }}
+          PYTHON_DOTENV_DISABLED: '1'
         run: |
           if [[ -z "${MONGODB_URI//[[:space:]]/}" ]]; then
             echo "::error::The MONGODB_URI Actions secret is required."

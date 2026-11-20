@@ -40,7 +40,9 @@ def main():
         # Show only the summaries below, even if a dependency emits diagnostics.
         with open(os.devnull, "w") as sink, redirect_stdout(sink), redirect_stderr(sink):
             load_dotenv(Path(__file__).resolve().with_name(".env"), override=False)
-            for url in list_due_urls(MAX_TARGETS_PER_RUN):
+            if not os.getenv("MONGODB_URI", "").strip():
+                raise RuntimeError("MONGODB_URI is required.")
+            for url in list_due_urls(MAX_TARGETS_PER_RUN)[:MAX_TARGETS_PER_RUN]:
                 ok, message = check_and_save(url)
                 try:
                     hostname = urlsplit(normalize_url(url)).hostname

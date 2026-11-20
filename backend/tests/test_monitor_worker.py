@@ -1,3 +1,4 @@
+import os
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -16,6 +17,9 @@ WEBSITES = ["https://one.example.net/status", "https://two.example.net/health"]
 
 class MonitorWorkerTests(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, {"MONGODB_URI": "worker-test-fixture"})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.load_env = self.start_patch("monitor_worker.load_dotenv")
         self.list_due = self.start_patch("monitor_worker.list_due_urls")
         self.list_due.return_value = WEBSITES
@@ -64,3 +68,15 @@ class MonitorWorkerTests(unittest.TestCase):
         self.list_due.return_value = []
         self.assertEqual(self.run_worker(), (0, ["No monitoring targets are due"]))
         self.check.assert_not_called()
+
+    def test_missing_uri_fails_before_listing_targets(self):
+        with patch.dict(os.environ, {"MONGODB_URI": " "}):
+            self.assertEqual(self.run_worker(), (1, ["Monitoring database unavailable"]))
+        self.list_due.assert_not_called()
+
+    def test_never_processes_more_than_one_batch(self):
+        self.list_due.return_value = WEBSITES * monitor_worker.MAX_TARGETS_PER_RUN
+        exit_code, summaries = self.run_worker()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(summaries), monitor_worker.MAX_TARGETS_PER_RUN)
+        self.assertEqual(self.check.call_count, monitor_worker.MAX_TARGETS_PER_RUN)

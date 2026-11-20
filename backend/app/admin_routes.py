@@ -4,8 +4,8 @@ from hmac import compare_digest
 
 from flask import Blueprint, current_app, jsonify, make_response, request
 from pymongo.errors import PyMongoError
-from werkzeug.exceptions import RequestEntityTooLarge
 
+from .request_security import bounded_body, json_object, rate_limit_client
 from .services import admin
 from .services.limits import RateLimited
 from .services.targets import list_targets
@@ -93,29 +93,28 @@ def admin_required(view):
 
 
 @admin_routes.post("/login")
+@bounded_body(8192)
 def login():
     if not _origin_allowed(required=True):
         return _csrf_error()
 
-    request.max_content_length = 8192
     try:
-        payload = request.get_json(silent=True)
-        if isinstance(payload, dict):
-            username, password = payload.get("username"), payload.get("password")
-            if (
-                isinstance(username, str) and admin.USERNAME.fullmatch(username)
-                and isinstance(password, str) and 1 <= len(password) <= 1024
-            ):
-                password.encode()
-                token = admin.login(username, password, request.remote_addr or "unknown", _session_token())
-                if token:
-                    response = jsonify(username=username, csrf_token=admin.csrf_token(token))
-                    response.set_cookie(
-                        _cookie_name(), token, max_age=admin.SESSION_SECONDS, path="/",
-                        secure=current_app.config["ADMIN_COOKIE_SECURE"], httponly=True, samesite="Lax",
-                    )
-                    return response
-    except (UnicodeError, RequestEntityTooLarge):
+        payload = json_object()
+        username, password = payload.get("username"), payload.get("password")
+        if (
+            isinstance(username, str) and admin.USERNAME.fullmatch(username)
+            and isinstance(password, str) and 1 <= len(password) <= 1024
+        ):
+            password.encode()
+            token = admin.login(username, password, rate_limit_client(), _session_token())
+            if token:
+                response = jsonify(username=username, csrf_token=admin.csrf_token(token))
+                response.set_cookie(
+                    _cookie_name(), token, max_age=admin.SESSION_SECONDS, path="/",
+                    secure=current_app.config["ADMIN_COOKIE_SECURE"], httponly=True, samesite="Lax",
+                )
+                return response
+    except UnicodeError:
         pass
     except RateLimited as error:
         return jsonify(error="Too many login attempts. Try again later."), 429, {
@@ -141,6 +140,7 @@ def session():
 
 
 @admin_routes.post("/logout")
+@bounded_body(0)
 def logout():
     if not _origin_allowed(required=True):
         return _csrf_error()

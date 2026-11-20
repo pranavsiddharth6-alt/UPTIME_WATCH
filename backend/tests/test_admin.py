@@ -119,6 +119,18 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(self.http.get("/api/admin/targets", base_url=API).status_code, 401)
         self.targets.assert_not_called()
 
+    def test_proxied_same_origin_session_and_csrf_are_required(self):
+        login = self.http.post(
+            "/api/admin/login", json={"username": "operator", "password": PASSWORD},
+            headers={**HEADERS, "Sec-Fetch-Site": "same-origin"}, base_url=ORIGIN,
+        )
+        self.assertEqual(login.status_code, 200)
+        session = self.http.get("/api/admin/session", base_url=ORIGIN)
+        self.assertEqual(session.get_json(), login.get_json())
+        self.assertEqual(self.http.post("/api/admin/logout", headers=HEADERS, base_url=ORIGIN).status_code, 403)
+        headers = {**HEADERS, "X-CSRF-Token": session.get_json()["csrf_token"]}
+        self.assertEqual(self.http.post("/api/admin/logout", headers=headers, base_url=ORIGIN).status_code, 204)
+
     def test_login_errors_are_generic_and_rate_limit_precedes_verification(self):
         wrong_user = self.sign_in(username="other")
         wrong_password = self.sign_in(password="incorrect")

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const configured = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+const configured = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '') : ''
 const localApi = /^http:\/\/(localhost|127\.0\.0\.1):5000$/
 const apiBase = import.meta.env.DEV && localApi.test(configured) ? '' : configured
 

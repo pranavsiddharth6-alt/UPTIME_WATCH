@@ -2,8 +2,9 @@ import os
 import re
 from urllib.parse import urlsplit
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from .admin_routes import admin_routes
 from .routes import routes
@@ -39,11 +40,16 @@ def create_app():
     origin = _frontend_origin(development)
     app.config.update(
         DEBUG=development,
+        USE_DIRECT_CLIENT_ADDRESS=development,
         ADMIN_FRONTEND_ORIGIN=origin,
         ADMIN_COOKIE_SECURE=not development,
     )
     app.register_blueprint(routes)
     app.register_blueprint(admin_routes)
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def request_too_large(_error):
+        return jsonify(error="Request body is too large."), 413, {"Cache-Control": "no-store"}
 
     if origin:
         CORS(

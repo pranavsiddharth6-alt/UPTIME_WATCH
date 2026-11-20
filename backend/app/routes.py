@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, request
 from pymongo.errors import PyMongoError
-from werkzeug.exceptions import RequestEntityTooLarge
 
 from .admin_routes import admin_required
+from .request_security import URL_BODY_LIMIT, bounded_body, json_object, rate_limit_client
 from .services.history import get_history, get_uptime_analytics
 from .services.limits import RateLimited
 from .services.monitor import (
@@ -24,12 +24,6 @@ from .services.targets import (
 
 routes = Blueprint("routes", __name__)
 DATABASE_ERROR = "Monitoring database unavailable"
-ONE_TIME_BODY_LIMIT = 16 * 1024
-
-
-def _submitted_url():
-    payload = request.get_json(silent=True)
-    return payload.get("url") if isinstance(payload, dict) else None
 
 
 def _rate_limit_response(error):
@@ -49,9 +43,10 @@ def health():
 
 
 @routes.post("/api/check")
+@bounded_body(URL_BODY_LIMIT)
 def check():
     try:
-        result = run_registered_check(_submitted_url(), client_address=request.remote_addr or "unknown")
+        result = run_registered_check(json_object().get("url"), client_address=rate_limit_client())
     except (UnsafeTarget, TargetNotFound):
         return jsonify(error="Website is unsafe, unregistered, or disabled"), 400
     except RateLimited as error:
@@ -65,12 +60,10 @@ def check():
 
 
 @routes.post("/api/check-once")
+@bounded_body(URL_BODY_LIMIT)
 def check_once():
-    request.max_content_length = ONE_TIME_BODY_LIMIT
     try:
-        result = run_one_time_check(_submitted_url(), client_address=request.remote_addr or "unknown")
-    except RequestEntityTooLarge:
-        return jsonify(error="Website check request is too large."), 413
+        result = run_one_time_check(json_object().get("url"), client_address=rate_limit_client())
     except UnsafeTarget:
         return jsonify(
             error="Use a public HTTPS URL on port 443 without credentials, a query, or a fragment. "
@@ -95,13 +88,11 @@ def targets():
 
 
 @routes.post("/api/targets")
+@bounded_body(URL_BODY_LIMIT)
 @admin_required
 def create_target():
-    request.max_content_length = ONE_TIME_BODY_LIMIT
     try:
-        return jsonify(register_target(_submitted_url())), 201
-    except RequestEntityTooLarge:
-        return jsonify(error="Target request is too large."), 413
+        return jsonify(register_target(json_object().get("url"))), 201
     except (UnsafeTarget, ProbeUnavailable):
         return jsonify(error="Target must be a public HTTPS hostname URL with public DNS"), 400
     except DuplicateTarget:
@@ -113,6 +104,7 @@ def create_target():
 
 
 @routes.delete("/api/targets/<target_id>")
+@bounded_body(0)
 @admin_required
 def delete_target(target_id):
     try:
@@ -125,17 +117,15 @@ def delete_target(target_id):
 
 
 @routes.patch("/api/targets/<target_id>")
+@bounded_body(1024)
 @admin_required
 def update_target(target_id):
-    request.max_content_length = 1024
     try:
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict) or not isinstance(payload.get("enabled"), bool):
+        enabled = json_object().get("enabled")
+        if not isinstance(enabled, bool):
             return jsonify(error="Enabled must be true or false."), 400
-        set_target_enabled(target_id, payload["enabled"])
+        set_target_enabled(target_id, enabled)
         return "", 204
-    except RequestEntityTooLarge:
-        return jsonify(error="Target request is too large."), 413
     except TargetNotFound:
         return jsonify(error="Target was not found"), 404
     except (PyMongoError, RuntimeError):

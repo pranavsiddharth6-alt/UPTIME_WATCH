@@ -19,6 +19,7 @@ class OneTimeCheckTests(unittest.TestCase):
     def setUp(self):
         app = create_app()
         app.config["TESTING"] = True
+        self.app = app
         self.http = app.test_client()
         self.mongo = self.start_patch("app.services.monitoring.get_mongo_client")
         client = self.mongo.return_value.__enter__.return_value
@@ -87,6 +88,7 @@ class OneTimeCheckTests(unittest.TestCase):
         self.save.assert_not_called()
 
     def test_client_limit_uses_peer_address_and_blocks_dns(self):
+        self.app.config["USE_DIRECT_CLIENT_ADDRESS"] = True
         self.buckets.find_one_and_update.return_value = {"count": ONE_TIME_CLIENT_CHECKS_PER_WINDOW + 1}
         response = self.http.post(
             "/api/check-once", json={"url": URL}, headers={"X-Forwarded-For": "203.0.113.1"},

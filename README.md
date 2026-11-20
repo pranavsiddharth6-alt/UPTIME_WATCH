@@ -50,7 +50,7 @@ From `frontend`, run `node --test tests/vercel.test.mjs` to validate the rewrite
 
 ## Render and Vercel setup
 
-The repository contains the production entrypoint and rewrite configuration. Cloud services, domains, secrets, and Atlas access still need to be configured and verified. Start with a separate staging database.
+The repository contains the production entrypoint and rewrites to the live Render backend. Verify the Vercel project and admin flow after import. Use a separate staging database when testing changes that write data.
 
 ### Render backend
 
@@ -72,9 +72,9 @@ Production uses shared rate-limit buckets per operation for login (5/minute), on
 - Install command — `npm ci`.
 - Build command — `npm run build`.
 - Output directory — `dist`.
-- Required environment variable — `UPTIMEWATCH_RENDER_ORIGIN`. Set it to the actual `https://your-render-service.onrender.com` origin. The Vercel configuration requires HTTPS and rejects credentials, paths, and alternate hosts.
+- Frontend environment — leave `VITE_API_URL` unset in Vercel. The static rewrites require no backend-origin environment variable.
 
-`frontend/vercel.mjs` rewrites `/api/*` and `/health` to Render at build time. The production bundle uses relative URLs. `VITE_API_URL` is optional in local development. Keep MongoDB settings, admin credentials, and tokens off Vercel and out of `VITE_*` variables. For previews that need admin access, use a separate staging backend and an exact stable HTTPS frontend origin. [Vercel programmatic configuration](https://vercel.com/docs/project-configuration/vercel-ts) · [External rewrites](https://vercel.com/docs/routing/rewrites)
+`frontend/vercel.json` rewrites `/api/*` and `/health` to `https://uptime-watch-q67r.onrender.com`. The browser uses relative URLs on the Vercel origin for API calls, cookies, and CSRF-protected requests. `VITE_API_URL` is optional in local development. Keep MongoDB settings, admin credentials, and tokens off Vercel and out of `VITE_*` variables. For previews that need admin access, point their rewrites at a separate staging backend configured for the exact frontend HTTPS origin. [External rewrites](https://vercel.com/docs/routing/rewrites)
 
 After deployment is authorized, smoke-test through the Vercel URL. Check `/health` and `/api/targets`, run a one-time check against an approved test URL, then sign in, reload, change a staging target, and sign out. Confirm the session cookie is `Secure`, `HttpOnly`, `SameSite=Lax`, host-only, and scoped to `/`. Confirm admin responses are `no-store`, and a target change without valid CSRF is rejected. Keep browser admin access disabled if the hosted proxy fails to preserve the expected origin, cookie, or CSRF behavior.
 
@@ -93,4 +93,4 @@ Keep the 15-minute UTC cron example commented out until an authorized manual dis
 - The workflow's current `ubuntu-latest` runner has no dedicated static egress. Before dispatch, route the job through a runner with approved fixed egress or private network access. Static-IP GitHub larger runners require an eligible organization plan and are metered, including for public repositories. A separate private automation repository with an isolated self-hosted runner and fixed NAT egress is another option, with compute, networking, and maintenance costs. Keep self-hosted runners away from untrusted public workflows. [GitHub runner IP guidance](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#ip-addresses) · [Larger runners](https://docs.github.com/en/actions/concepts/runners/larger-runners) · [Secure use](https://docs.github.com/en/actions/reference/security/secure-use)
 - Allowlist only approved egress ranges. Private endpoints require a compatible network and an Atlas dedicated cluster at M10 or higher. Keep Atlas public access restricted and defer the manual workflow run while runner egress is unresolved. [Atlas IP access list](https://www.mongodb.com/docs/atlas/security/ip-access-list/) · [Atlas private endpoints](https://www.mongodb.com/docs/atlas/security-private-endpoint/)
 
-GitHub Actions scheduling and cloud deployment are not enabled yet.
+GitHub Actions scheduling remains disabled.

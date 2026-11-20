@@ -75,7 +75,7 @@ export function Overview({ targets, history, analytics }) {
         <div className="card-body">
           {statusLoading && <Skeleton label="Loading website status" />}
           {!statusLoading && !statusReady && <ErrorNotice>Website status could not be loaded.</ErrorNotice>}
-          {statusReady && !registered.length && <Empty icon={Globe2} title="No registered websites" detail="Add an approved target from the admin panel." action={<a className="text-link" href="#admin">Open admin <ArrowRight size={15} /></a>} />}
+          {statusReady && !registered.length && <Empty icon={Globe2} title="No registered websites" detail="Registered websites will appear here when monitoring is set up." />}
           {statusReady && registered.length > 0 && <ul className="site-list">
             {registered.slice(0, 5).map(({ id, url }) => <li key={id}>
               <div><strong>{displayHost(url)}</strong><small>{latest.get(url) ? formatDate(latest.get(url).checked_at) : 'Awaiting a recent sample'}</small></div>

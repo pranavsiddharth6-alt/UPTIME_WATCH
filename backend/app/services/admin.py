@@ -1,7 +1,6 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import lru_cache
-from hashlib import sha256
 from hmac import compare_digest
 from secrets import token_urlsafe
 from threading import BoundedSemaphore
@@ -11,6 +10,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..database import get_database, get_mongo_client
 from .limits import consume_budget, ensure_budget_index
+from .sessions import create_session, digest
 
 try:
     from argon2 import PasswordHasher
@@ -20,11 +20,8 @@ except ImportError:
 
 
 ACCOUNTS = "admin_accounts"
-SESSIONS = "admin_sessions"
-SESSION_SECONDS = 4 * 60 * 60
 ACCOUNT_ID = "admin"
 USERNAME = re.compile(r"[A-Za-z0-9_.@-]{3,64}")
-SESSION_TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 SCRYPT = "scrypt:32768:8:3"
 hasher = PasswordHasher() if PasswordHasher else None
 password_slots = BoundedSemaphore(1)
@@ -59,20 +56,6 @@ def _dummy_hash():
     return hash_password(token_urlsafe(32))
 
 
-def _digest(token):
-    return sha256(token.encode()).hexdigest()
-
-
-def csrf_token(token):
-    return _digest(f"uptimewatch-admin-csrf:{token}")
-
-
-def _session_id(token):
-    if isinstance(token, str) and SESSION_TOKEN.fullmatch(token):
-        return _digest(token)
-    return None
-
-
 def create_admin(username, password):
     if not USERNAME.fullmatch(username) or not 12 <= len(password) <= 1024:
         raise ValueError("Use a 3–64 character username and a password of 12–1024 characters.")
@@ -89,7 +72,7 @@ def login(username, password, client_address, previous_token):
         database = get_database(client)
         ensure_budget_index(database)
         now = datetime.now(timezone.utc)
-        consume_budget(database, f"admin:login:{_digest(client_address)}", 5, now)
+        consume_budget(database, f"admin:login:{digest(client_address)}", 5, now)
         consume_budget(database, "admin:logins", 30, now)
 
         account = database[ACCOUNTS].find_one({"_id": ACCOUNT_ID})
@@ -103,35 +86,4 @@ def login(username, password, client_address, previous_token):
         if not account or not compare_digest(username.encode(), account["username"].encode()) or not password_matches:
             return None
 
-        sessions = database[SESSIONS]
-        sessions.create_index("expires_at", expireAfterSeconds=0)
-        previous_id = _session_id(previous_token)
-        if previous_id:
-            sessions.delete_one({"_id": previous_id})
-
-        token = token_urlsafe(32)
-        sessions.insert_one({
-            "_id": _digest(token),
-            "username": account["username"],
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=SESSION_SECONDS),
-        })
-        return token
-
-
-def session_username(token):
-    session_id = _session_id(token)
-    if session_id is None:
-        return None
-    with get_mongo_client() as client:
-        record = get_database(client)[SESSIONS].find_one({
-            "_id": session_id, "expires_at": {"$gt": datetime.now(timezone.utc)},
-        }, {"username": 1})
-        return record["username"] if record else None
-
-
-def revoke_session(token):
-    session_id = _session_id(token)
-    if session_id is None:
-        return
-    with get_mongo_client() as client:
-        get_database(client)[SESSIONS].delete_one({"_id": session_id})
+        return create_session(database, {"role": "admin", "username": account["username"]}, previous_token)

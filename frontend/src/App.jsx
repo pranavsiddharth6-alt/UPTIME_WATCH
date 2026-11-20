@@ -1,26 +1,42 @@
 import { useEffect, useState } from 'react'
 import {
-  Activity, ChevronRight, Globe2, History, LayoutGrid, Menu, Radio, RefreshCw, ShieldCheck, X,
+  Activity, ChevronRight, Globe2, History, LayoutGrid, Menu, Radio, RefreshCw, Settings, UserRound, X,
 } from 'lucide-react'
-import Admin from './Admin.jsx'
+import Account from './Account.jsx'
+import ManageTargets from './ManageTargets.jsx'
 import { useResource } from './api.js'
 import { HistoryPage, MonitoredPage, Overview, WebsiteCheck } from './MonitoringDashboard.jsx'
+import { useAuth } from './useAuth.js'
 
 const pages = [
-  ['overview', 'Overview', LayoutGrid],
+  ['overview', 'Dashboard', LayoutGrid],
   ['check', 'Check Website', Globe2],
   ['monitored', 'Monitored Websites', Radio],
   ['history', 'History', History],
-  ['admin', 'Admin', ShieldCheck],
 ]
 
 function readPage() {
   const page = window.location.hash.slice(1)
-  return pages.some(([id]) => id === page) ? page : 'overview'
+  if (page === 'admin') return 'account'
+  return page === 'account' || page === 'manage' || pages.some(([id]) => id === page) ? page : 'overview'
+}
+
+function navigation(session) {
+  const items = [...pages]
+  if (session.state === 'active' && session.user.role === 'admin') items.push(['manage', 'Manage Targets', Settings])
+  items.push(['account', session.state === 'signed-out' ? 'Sign In' : 'Account', UserRound])
+  return items
 }
 
 export default function App() {
-  const [page, setPage] = useState(readPage)
+  const auth = useAuth()
+  return <DashboardApp auth={auth} />
+}
+
+export function DashboardApp({ auth }) {
+  const [requestedPage, setPage] = useState(readPage)
+  const navItems = navigation(auth.session)
+  const page = navItems.some(([id]) => id === requestedPage) ? requestedPage : 'account'
   const [menuOpen, setMenuOpen] = useState(false)
   const [revision, setRevision] = useState(0)
   const [historySearch, setHistorySearch] = useState('')
@@ -34,7 +50,7 @@ export default function App() {
     revision,
   )
   const online = health.state === 'success' && health.data.status === 'healthy'
-  const pageTitle = pages.find(([id]) => page === id)[1]
+  const pageTitle = navItems.find(([id]) => page === id)[1]
 
   useEffect(() => {
     function update() {
@@ -68,7 +84,7 @@ export default function App() {
         </a>
         <div className="nav-caption">Workspace</div>
         <nav aria-label="Main navigation">
-          {pages.map(([id, label, Icon]) => (
+          {navItems.map(([id, label, Icon]) => (
             <a
               key={id} href={`#${id}`} className={page === id ? 'nav-link nav-current' : 'nav-link'}
               aria-current={page === id ? 'page' : undefined}
@@ -110,7 +126,9 @@ export default function App() {
           {page === 'monitored' && <MonitoredPage targets={targets} history={history} analytics={analytics} onRefresh={refresh} onHistory={openHistory} />}
           {page === 'history' && <HistoryPage history={historyUrl ? siteHistory : history} site={historyUrl}
             onClearSite={() => setHistoryUrl('')} search={historySearch} onSearch={setHistorySearch} />}
-          {page === 'admin' && <Admin history={history} analytics={analytics} onRefresh={refresh} onHistory={openHistory} />}
+          {page === 'account' && <Account auth={auth} />}
+          {page === 'manage' && <ManageTargets session={auth.session} onSessionCheck={auth.refresh}
+            history={history} analytics={analytics} onRefresh={refresh} onHistory={openHistory} />}
         </main>
       </div>
     </div>

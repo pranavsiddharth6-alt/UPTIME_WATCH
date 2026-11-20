@@ -6,4 +6,5 @@ python-dotenv
 certifi
 dnspython
 argon2-cffi
+google-auth>=2.62.2,<3
 gunicorn==27.0.1; sys_platform != "win32"

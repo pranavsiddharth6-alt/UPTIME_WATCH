@@ -6,8 +6,9 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from .admin_routes import admin_routes
+from .admin_routes import admin_routes, auth_routes
 from .routes import routes
+from .services.google_signin import CLIENT_ID
 
 
 def _frontend_origin(development):
@@ -38,14 +39,17 @@ def create_app():
     app = Flask(__name__)
     development = os.getenv("UPTIMEWATCH_ENV") == "development"
     origin = _frontend_origin(development)
+    google_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
     app.config.update(
         DEBUG=development,
         USE_DIRECT_CLIENT_ADDRESS=development,
         ADMIN_FRONTEND_ORIGIN=origin,
         ADMIN_COOKIE_SECURE=not development,
+        GOOGLE_CLIENT_ID=google_client_id if CLIENT_ID.fullmatch(google_client_id) else None,
     )
     app.register_blueprint(routes)
     app.register_blueprint(admin_routes)
+    app.register_blueprint(auth_routes)
 
     @app.errorhandler(RequestEntityTooLarge)
     def request_too_large(_error):

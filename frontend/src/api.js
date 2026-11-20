@@ -11,13 +11,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, { method = 'GET', body, admin = false, csrf, signal } = {}) {
+export async function apiRequest(path, { method = 'GET', body, authenticated = false, csrf, signal } = {}) {
   const headers = new Headers()
   if (body !== undefined) headers.set('Content-Type', 'application/json')
   if (csrf) headers.set('X-CSRF-Token', csrf)
 
   const response = await fetch(`${apiBase}${path}`, {
-    method, headers, signal, cache: 'no-store', credentials: admin ? 'include' : 'omit',
+    method, headers, signal, cache: 'no-store', credentials: authenticated ? 'include' : 'omit',
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (response.status === 204) return null
@@ -27,12 +27,12 @@ export async function apiRequest(path, { method = 'GET', body, admin = false, cs
   return data
 }
 
-export function useResource(path, revision, admin = false) {
+export function useResource(path, revision, authenticated = false) {
   const [result, setResult] = useState(null)
   useEffect(() => {
     if (!path) return
     const controller = new AbortController()
-    apiRequest(path, { admin, signal: controller.signal })
+    apiRequest(path, { authenticated, signal: controller.signal })
       .then((data) => {
         if (!controller.signal.aborted) setResult({ path, revision, state: 'success', data })
       })
@@ -40,7 +40,7 @@ export function useResource(path, revision, admin = false) {
         if (!controller.signal.aborted) setResult({ path, revision, state: 'error', error })
       })
     return () => controller.abort()
-  }, [path, revision, admin])
+  }, [path, revision, authenticated])
   if (!path) return { state: 'idle' }
   return result?.path === path && result.revision === revision ? result : { state: 'loading' }
 }

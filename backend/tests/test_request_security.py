@@ -23,11 +23,15 @@ class RequestSecurityTests(unittest.TestCase):
             ("DELETE", "/api/targets/id", 1),
             ("POST", "/api/admin/login", 8193),
             ("POST", "/api/admin/logout", 1),
+            ("POST", "/api/auth/local", 8193),
+            ("POST", "/api/auth/google", 16385),
+            ("POST", "/api/auth/google/challenge", 1),
+            ("POST", "/api/auth/logout", 1),
         )
         with (
             patch("app.routes.run_registered_check") as check,
             patch("app.routes.run_one_time_check") as check_once,
-            patch("app.admin_routes.admin.session_username") as session,
+            patch("app.admin_routes.sessions.profile") as session,
             patch("app.admin_routes.admin.login") as login,
         ):
             for method, path, size in cases:

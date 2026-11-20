@@ -34,6 +34,9 @@ class AdminTests(unittest.TestCase):
         self.http = app.test_client()
 
         self.mongo = self.mock("app.services.admin.get_mongo_client")
+        sessions_mongo = patch("app.services.sessions.get_mongo_client", self.mongo)
+        sessions_mongo.start()
+        self.addCleanup(sessions_mongo.stop)
         client = self.mongo.return_value.__enter__.return_value
         database = client.__getitem__.return_value
         self.accounts, self.sessions, buckets = (MagicMock(), MagicMock(), MagicMock())
@@ -66,7 +69,7 @@ class AdminTests(unittest.TestCase):
     def find_session(self, filters, projection):
         value = self.saved_sessions.get(filters["_id"])
         if value and value["expires_at"] > filters["expires_at"]["$gt"]:
-            return {"username": value["username"]}
+            return {key: value[key] for key in projection if key in value}
         return None
 
     def delete_session(self, filters):
@@ -74,7 +77,7 @@ class AdminTests(unittest.TestCase):
 
     def sign_in(self, username="operator", password=PASSWORD, headers=HEADERS):
         return self.http.post(
-            "/api/admin/login", json={"username": username, "password": password},
+            "/api/auth/local", json={"username": username, "password": password},
             headers=headers, base_url=API,
         )
 
@@ -118,6 +121,16 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(self.http.get("/api/admin/session", base_url=API).status_code, 401)
         self.assertEqual(self.http.get("/api/admin/targets", base_url=API).status_code, 401)
         self.targets.assert_not_called()
+
+    def test_existing_admin_sessions_are_recognized_by_unified_endpoint(self):
+        response = self.sign_in()
+        next(iter(self.saved_sessions.values())).pop("role")
+        session = self.http.get("/api/auth/session", base_url=API)
+        data = session.get_json()
+        self.assertIn("expires_at", data)
+        self.assertEqual(data["csrf_token"], response.get_json()["csrf_token"])
+        self.assertEqual(data["user"], {"role": "admin", "name": "operator"})
+        self.assertEqual(self.http.get("/api/admin/targets", base_url=API).status_code, 200)
 
     def test_proxied_same_origin_session_and_csrf_are_required(self):
         login = self.http.post(

@@ -11,6 +11,9 @@ test('Vercel uses one static config with the Vite build and same-origin API rewr
   assert.equal(config.framework, 'vite')
   assert.equal(config.buildCommand, 'npm run build')
   assert.equal(config.outputDirectory, 'dist')
+  assert.deepEqual(config.headers, [{
+    source: '/', headers: [{ key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' }],
+  }])
   assert.deepEqual(config.rewrites, [
     { source: '/api/:path*', destination: `${origin}/api/:path*` },
     { source: '/health', destination: `${origin}/health` },

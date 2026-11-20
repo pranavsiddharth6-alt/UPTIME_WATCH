@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Node.js and Vite
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local database files
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Private keys, certificates, and local credentials
+*.key
+*.pem
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+credentials
+credentials.json
+credentials.local.*
+secrets.json
+secrets.local.*

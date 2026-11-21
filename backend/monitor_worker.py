@@ -13,13 +13,14 @@ from app.services.targets import TargetNotFound, list_due_urls
 
 
 MAX_TARGETS_PER_RUN = 10
+SKIPPED_TARGET = "Skipped (rate-limited or disabled)"
 
 
 def check_and_save(url):
     try:
         result = run_registered_check(url)
     except (RateLimited, TargetNotFound):
-        return True, "Skipped (rate-limited or disabled)"
+        return True, SKIPPED_TARGET
     except UnsafeTarget:
         return False, "Website destination blocked"
     except SecureTransportUnavailable:

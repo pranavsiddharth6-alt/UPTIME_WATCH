@@ -185,12 +185,16 @@ class AdminTests(unittest.TestCase):
 
     def test_logout_requires_csrf_and_revokes_server_session(self):
         csrf = self.sign_in().get_json()["csrf_token"]
+        original_cookie = self.http.get_cookie(COOKIE, domain="api.example.com").value
         self.assertEqual(self.http.post("/api/admin/logout", headers=HEADERS, base_url=API).status_code, 403)
         self.assertEqual(len(self.saved_sessions), 1)
         response = self.http.post("/api/admin/logout", headers={**HEADERS, "X-CSRF-Token": csrf}, base_url=API)
         self.assertEqual(response.status_code, 204)
         self.assertFalse(self.saved_sessions)
         self.assertIsNone(self.http.get_cookie(COOKIE, domain="api.example.com"))
+        self.http.set_cookie(COOKIE, original_cookie, domain="api.example.com")
+        self.assertEqual(self.http.get("/api/admin/targets", base_url=API).status_code, 401)
+        self.targets.assert_not_called()
 
     def test_bearer_token_allowed_for_cli_only(self):
         bearer = {"Authorization": "Bearer test-cli-token"}

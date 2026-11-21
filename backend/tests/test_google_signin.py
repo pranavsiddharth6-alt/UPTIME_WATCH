@@ -129,6 +129,14 @@ class GoogleSignInTests(unittest.TestCase):
                 forbidden = self.http.open(path, method=method, base_url=ORIGIN, headers=authenticated)
                 self.assertEqual(forbidden.status_code, 403)
 
+        with (
+            patch.dict(os.environ, {"WORKER_TRIGGER_SECRET": "x" * 43}),
+            patch("app.worker_routes.subprocess.run") as launch,
+        ):
+            response = self.http.post("/internal/monitor/run", base_url=ORIGIN)
+            self.assertEqual(response.status_code, 401)
+            launch.assert_not_called()
+
         self.assertEqual(self.post("logout").status_code, 403)
         self.assertEqual(self.post("logout", headers={**authenticated, "Origin": "https://other.example.net"}).status_code, 403)
         self.assertEqual(self.post("logout", headers=authenticated).status_code, 204)

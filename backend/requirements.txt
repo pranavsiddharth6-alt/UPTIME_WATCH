@@ -1,7 +1,7 @@
 Flask>=3.1,<4
 flask-cors
 requests
-pymongo
+pymongo>=4.2,<5
 python-dotenv
 certifi
 dnspython

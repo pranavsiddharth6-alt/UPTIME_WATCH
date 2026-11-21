@@ -9,6 +9,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from .admin_routes import admin_routes, auth_routes
 from .routes import routes
 from .services.google_signin import CLIENT_ID
+from .worker_routes import worker_routes
 
 
 def _frontend_origin(development):
@@ -50,6 +51,7 @@ def create_app():
     app.register_blueprint(routes)
     app.register_blueprint(admin_routes)
     app.register_blueprint(auth_routes)
+    app.register_blueprint(worker_routes)
 
     @app.errorhandler(RequestEntityTooLarge)
     def request_too_large(_error):

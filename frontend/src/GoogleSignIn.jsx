@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiRequest } from './api.js'
+import { isGoogleChallenge, renderGoogleButton } from './googleButton.js'
 
 let scriptRequest
+
+const ISSUES = {
+  unavailable: 'The Google sign-in service is currently unavailable. Please try again.',
+  origin: 'This address could not be verified for Google sign-in. Open the configured UptimeWatch site.',
+  configuration: 'Google sign-in returned invalid setup information. Contact the site owner.',
+  sdk: 'Google’s sign-in button could not load. Check your connection and allow Google Identity Services for this site.',
+  limited: 'Google sign-in is busy. Wait a minute and try again.',
+  expired: 'This sign-in attempt expired. Start a new one to continue.',
+}
 
 function loadGoogle() {
   if (window.google?.accounts?.id) return Promise.resolve(window.google.accounts.id)
@@ -33,46 +43,67 @@ export default function GoogleSignIn({ onCredential, disabled }) {
   const target = useRef(null)
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState('loading')
+  const [promptHint, setPromptHint] = useState(false)
+  const useFedCM = new URLSearchParams(globalThis.window?.location.search).get('google') !== 'popup'
 
   useEffect(() => {
     const controller = new AbortController()
     const button = target.current
     let expired
+    let disposeButton
 
-    async function renderButton() {
+    async function prepareButton() {
+      let challenge
       try {
-        const { client_id, nonce } = await apiRequest('/api/auth/google/challenge', {
+        challenge = await apiRequest('/api/auth/google/challenge', {
           method: 'POST', authenticated: true, signal: controller.signal,
         })
-        if (controller.signal.aborted) return
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setStatus(({ 403: 'origin', 429: 'limited' })[error.status] || 'unavailable')
+        }
+        return
+      }
+      if (controller.signal.aborted) return
+      if (!isGoogleChallenge(challenge)) {
+        setStatus('configuration')
+        return
+      }
+      try {
         const google = await loadGoogle()
         if (controller.signal.aborted) return
-        google.initialize({
-          client_id, nonce, ux_mode: 'popup', auto_select: false,
-          callback: async ({ credential }) => {
-            if (!controller.signal.aborted && credential) {
-              const signedIn = await onCredential(credential)
-              if (!signedIn && !controller.signal.aborted) setStatus('retry')
-            }
+        disposeButton = renderGoogleButton(google, button, challenge, {
+          useFedCM,
+          onWaiting: () => setPromptHint(false),
+          onNoResponse: () => setPromptHint(true),
+          onCredential: (credential) => {
+            window.clearTimeout(expired)
+            setPromptHint(false)
+            return onCredential(credential)
           },
+          onRejected: () => setStatus('retry'),
         })
-        google.renderButton(button, { theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular' })
         setStatus('ready')
-        expired = window.setTimeout(() => setStatus('retry'), 9 * 60 * 1000)
-      } catch (error) {
-        if (!controller.signal.aborted) setStatus(error.status === 429 ? 'limited' : 'unavailable')
+        expired = window.setTimeout(() => {
+          disposeButton()
+          setStatus('expired')
+        }, 9 * 60 * 1000)
+      } catch {
+        if (!controller.signal.aborted) setStatus('sdk')
       }
     }
 
-    renderButton()
+    prepareButton()
     return () => {
       controller.abort()
       window.clearTimeout(expired)
+      disposeButton?.()
       button.replaceChildren()
     }
-  }, [attempt, onCredential])
+  }, [attempt, onCredential, useFedCM])
 
   function retry() {
+    setPromptHint(false)
     setStatus('loading')
     setAttempt((value) => value + 1)
   }
@@ -80,9 +111,11 @@ export default function GoogleSignIn({ onCredential, disabled }) {
   return <div className="google-signin">
     <div ref={target} hidden={status !== 'ready'} inert={disabled} />
     {status === 'loading' && <p className="muted" role="status">Loading Google sign-in…</p>}
-    {status === 'unavailable' && <p className="muted" role="status">Google sign-in is currently unavailable.</p>}
-    {status === 'limited' && <p className="muted" role="status">Google sign-in is busy. Wait a minute and try again.</p>}
-    {['retry', 'unavailable', 'limited'].includes(status) && <button type="button" className="button secondary small"
+    {status === 'ready' && promptHint && <p className="muted" role="status">If Google did not open, check pop-up and third-party sign-in permissions. If Google shows a setup error, contact the site owner.</p>}
+    {status === 'ready' && useFedCM && !disabled && <a className="button secondary small" href="?google=popup#account">Use Google popup instead</a>}
+    {status === 'ready' && !useFedCM && !promptHint && <p className="muted" role="status">Click Continue with Google to open the popup.</p>}
+    {ISSUES[status] && <p className="muted" role="status">{ISSUES[status]}</p>}
+    {status !== 'loading' && status !== 'ready' && <button type="button" className="button secondary small"
       disabled={disabled} onClick={retry}>Retry Google sign-in</button>}
   </div>
 }

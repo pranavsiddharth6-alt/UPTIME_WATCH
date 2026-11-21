@@ -2,10 +2,8 @@ name: UptimeWatch monitoring
 
 on:
   workflow_dispatch:
-  # Enable only after an authorized manual run saves a check through Render.
-  # Example: every 15 minutes (UTC).
-  # schedule:
-  #   - cron: '*/15 * * * *'
+  schedule:
+    - cron: "7,22,37,52 * * * *"
 
 permissions:
   contents: read
